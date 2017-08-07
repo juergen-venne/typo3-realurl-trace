@@ -38,7 +38,7 @@ class DatabaseCacheWithTrace extends DatabaseCache  {
 	public function __construct() {
 		parent::__construct();
 
-		$this->traceConfiguration = (array)@unserialize($GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['realurl_trace']);
+		$this->traceConfiguration = (array)@unserialize($GLOBALS['TYPO3_CONF_VARS']['EXT']['extConf']['typo3-realurl-trace']);
 	}
 
 	/**
@@ -47,17 +47,42 @@ class DatabaseCacheWithTrace extends DatabaseCache  {
 	 * @param UrlCacheEntry $cacheEntry
 	 */
 	public function putUrlToCache(UrlCacheEntry $cacheEntry) {
-		$traceCall = ($this->traceConfiguration['logFilePath'] &&
+        $data = array(
+            'expire' => $cacheEntry->getExpiration(),
+            'original_url' => $cacheEntry->getOriginalUrl(),
+            'page_id' => $cacheEntry->getPageId(),
+            'request_variables' => json_encode($cacheEntry->getRequestVariables()),
+            'rootpage_id' => $cacheEntry->getRootPageId(),
+            'speaking_url' => $cacheEntry->getSpeakingUrl(),
+            'source_page_id' => $GLOBALS['TSFE']->id
+        );
+        if ($cacheEntry->getCacheId()) {
+            $this->databaseConnection->exec_UPDATEquery('tx_realurl_urldata',
+                'uid=' . $this->databaseConnection->fullQuoteStr($cacheEntry->getCacheId(), 'tx_realurl_urldata'),
+                $data
+            );
+        } else {
+            $this->databaseConnection->sql_query('START TRANSACTION');
+
+            if ($this->limitTableRecords('tx_realurl_urldata')) {
+                $this->databaseConnection->sql_query('DELETE FROM tx_realurl_uniqalias_cache_map WHERE url_cache_id NOT IN (SELECT uid FROM tx_realurl_urldata)');
+            }
+
+            $data['crdate'] = time();
+            $this->databaseConnection->exec_INSERTquery('tx_realurl_urldata', $data);
+            $cacheEntry->setCacheId($this->databaseConnection->sql_insert_id());
+
+            $this->databaseConnection->sql_query('COMMIT');
+        }
+        $traceCall = ($this->traceConfiguration['logFilePath'] &&
 			($this->traceConfiguration['originalUrlRegExp'] &&
 			preg_match($this->traceConfiguration['originalUrlRegExp'], $cacheEntry->getOriginalUrl()) ||
 			$this->traceConfiguration['speakingUrlRegExp'] &&
 			preg_match($this->traceConfiguration['speakingUrlRegExp'], $cacheEntry->getSpeakingUrl())));
-
 		if ($traceCall) {
 				$this->dumpStack($cacheEntry);
 		}
-
-		parent::putUrlToCache($cacheEntry);
+//		parent::putUrlToCache($cacheEntry);
 	}
 
 	/**

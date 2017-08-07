@@ -2,6 +2,8 @@
 
 This extensions dumps stack trace to a user-configured file when it detected that a certain URL is written to the RealURL data tables.
 
+The uid of the page which generates the cache entry can also be logged to the database. 
+
 To configure a regular expression for the speaking or original URL and the log file name, go to the extension's properties.
 
 This extension may help you to debug the places where strange URLs come from.
